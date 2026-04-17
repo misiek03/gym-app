@@ -1,18 +1,18 @@
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { RecentSessionCard } from '../../components/dashboard/RecentSessionCard';
-import { supabase } from '../../lib/supabase';
+import { useRouter } from 'expo-router';
 
 export default function DashboardScreen() {
+  const router = useRouter();
+
   return (
     <ScrollView className="flex-1 bg-[#0e0e0e] pt-16 pb-32">
       {/* Top Bar */}
       <View className="flex-row items-center justify-between px-6 mb-10">
         <TouchableOpacity 
           className="w-10 h-10 bg-[#20201f] rounded-full items-center justify-center active:opacity-80"
-          onPress={async () => {
-            await supabase.auth.signOut();
-          }}
+          onPress={() => router.push('/(auth)/profile')}
         >
           <Ionicons name="person" size={20} color="#adaaaa" />
         </TouchableOpacity>

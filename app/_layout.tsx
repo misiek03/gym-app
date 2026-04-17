@@ -26,12 +26,21 @@ function RootLayoutNav() {
     if (!isInitialized) return;
 
     const inAuthGroup = segments[0] === '(auth)';
+    const onLoginPage = inAuthGroup && segments[1] === 'login';
+    const onProfilePage = inAuthGroup && segments[1] === 'profile';
 
     if (!session && !inAuthGroup) {
+      // Not logged in and not in auth group → go to login
       router.replace('/(auth)/login');
-    } else if (session && inAuthGroup) {
+    } else if (!session && onProfilePage) {
+      // Not logged in but trying to access profile → go to login
+      router.replace('/(auth)/login');
+    } else if (session && onLoginPage) {
+      // Logged in but on the login page → redirect to tabs
       router.replace('/(tabs)');
     }
+    // If logged in and on profile page → let them stay
+    // If not logged in and on login page → let them stay
   }, [session, isInitialized, segments]);
 
   if (!isInitialized) {

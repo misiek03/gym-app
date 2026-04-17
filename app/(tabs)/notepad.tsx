@@ -1,19 +1,55 @@
-import { View, Text, TouchableOpacity, TextInput, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, Platform, ActivityIndicator, Keyboard, Pressable, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+
+const TAB_BAR_HEIGHT = 65;
 
 export default function NotepadScreen() {
   const queryClient = useQueryClient();
   const [text, setText] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved'|'saving'|'error'>('saved');
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+
+  // Animated value for the bottom padding that reacts to keyboard
+  const animatedPaddingBottom = useRef(new Animated.Value(0)).current;
+
+  // Track keyboard height & animate the container
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      setIsKeyboardVisible(true);
+      // Keyboard height minus the tab bar which it slides over
+      const targetPadding = e.endCoordinates.height - TAB_BAR_HEIGHT;
+      Animated.timing(animatedPaddingBottom, {
+        toValue: Math.max(targetPadding, 0),
+        duration: Platform.OS === 'ios' ? (e.duration ?? 250) : 250,
+        useNativeDriver: false,
+      }).start();
+    });
+
+    const hideSub = Keyboard.addListener(hideEvent, (e) => {
+      setIsKeyboardVisible(false);
+      Animated.timing(animatedPaddingBottom, {
+        toValue: 0,
+        duration: Platform.OS === 'ios' ? (e.duration ?? 250) : 250,
+        useNativeDriver: false,
+      }).start();
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // Load session & data
   const { data: remoteText, isLoading } = useQuery({
     queryKey: ['notepad'],
     queryFn: async () => {
-      // 1. Fetch notepad state (RLS protects this to only current user)
       const { data, error } = await supabase
         .from('notepad_state')
         .select('content')
@@ -45,7 +81,6 @@ export default function NotepadScreen() {
     },
     onSuccess: () => {
       setSaveStatus('saved');
-      // Update cache so next re-render doesn't overwrite typing
       queryClient.setQueryData(['notepad'], text);
     },
     onError: () => {
@@ -55,47 +90,44 @@ export default function NotepadScreen() {
 
   // Effect to trigger debounce save
   useEffect(() => {
-    // Check if loaded and if text actually changed from original fetch
     if (remoteText !== undefined && text !== remoteText && text !== queryClient.getQueryData(['notepad'])) {
       setSaveStatus('saving');
       const timer = setTimeout(() => {
         saveMutation.mutate(text);
-      }, 1500); // 1.5 second debounce
+      }, 1500);
       return () => clearTimeout(timer);
     }
   }, [text, remoteText]);
 
   return (
-    <KeyboardAvoidingView 
-      className="flex-1 bg-[#0e0e0e]" 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <View className="flex-1 pt-16 px-6 pb-24">
-        <View className="flex-row items-center justify-between mb-8">
-          <Text className="text-white text-3xl font-black tracking-tighter">WORKOUT LOG</Text>
-          <View className={`w-10 h-10 rounded-full items-center justify-center ${saveStatus === 'saved' ? 'bg-[#cafd00]' : 'bg-[#20201f]'}`}>
-            {saveStatus === 'saving' ? (
-               <ActivityIndicator size="small" color="#cafd00" />
-            ) : saveStatus === 'error' ? (
-               <Ionicons name="warning" size={20} color="#ff3333" />
-            ) : (
-               <Ionicons name="checkmark" size={24} color="#0e0e0e" />
-            )}
+    <View className="flex-1 bg-[#0e0e0e]">
+      <Animated.View
+        style={{
+          flex: 1,
+          paddingTop: 64,
+          paddingHorizontal: 24,
+          paddingBottom: animatedPaddingBottom,
+        }}
+      >
+        {/* Header — tap to dismiss keyboard */}
+        <Pressable onPress={Keyboard.dismiss}>
+          <View className={`flex-row items-center justify-between ${isKeyboardVisible ? 'mb-3' : 'mb-8'}`}>
+            <Text className={`text-white font-black tracking-tighter ${isKeyboardVisible ? 'text-xl' : 'text-3xl'}`}>
+              WORKOUT LOG
+            </Text>
+            <View className={`w-10 h-10 rounded-full items-center justify-center ${saveStatus === 'saved' ? 'bg-[#cafd00]' : 'bg-[#20201f]'}`}>
+              {saveStatus === 'saving' ? (
+                 <ActivityIndicator size="small" color="#cafd00" />
+              ) : saveStatus === 'error' ? (
+                 <Ionicons name="warning" size={20} color="#ff3333" />
+              ) : (
+                 <Ionicons name="checkmark" size={24} color="#0e0e0e" />
+              )}
+            </View>
           </View>
-        </View>
+        </Pressable>
 
-        <View className="flex-row flex-wrap mb-6 gap-2">
-          {['1x5','3x8','1RM','RPE8','Drop Set','AMRAP'].map((shortcut) => (
-            <TouchableOpacity 
-              key={shortcut} 
-              className="bg-[#20201f] px-4 py-2 rounded-full mr-2 mb-2"
-              onPress={() => setText((prev) => prev + (prev.endsWith(' ') || prev.length === 0 ? '' : ' ') + shortcut + ' ')}
-            >
-              <Text className="text-[#adaaaa] font-bold text-xs tracking-widest uppercase">{shortcut}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
+        {/* Notes area — fills all remaining space, shrinks with keyboard */}
         <View className="flex-1 bg-[#131313] rounded-3xl p-6">
           {isLoading ? (
              <View className="flex-1 items-center justify-center">
@@ -103,9 +135,10 @@ export default function NotepadScreen() {
              </View>
           ) : (
             <TextInput 
-              className="flex-1 text-white text-lg leading-relaxed align-top"
+              className="flex-1 text-white text-lg leading-relaxed"
               multiline
-              placeholder="Squat: 100kg x 5 (felt light)&#10;Bench: 80kg 3x8&#10;..."
+              scrollEnabled
+              placeholder={"Squat: 100kg x 5 (felt light)\nBench: 80kg 3x8\n..."}
               placeholderTextColor="#484847"
               style={{ textAlignVertical: 'top' }}
               value={text}
@@ -113,7 +146,7 @@ export default function NotepadScreen() {
             />
           )}
         </View>
-      </View>
-    </KeyboardAvoidingView>
+      </Animated.View>
+    </View>
   );
 }
