@@ -13,16 +13,7 @@ export default function NotepadScreen() {
   const { data: remoteText, isLoading } = useQuery({
     queryKey: ['notepad'],
     queryFn: async () => {
-      // 1. Check existing session
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      // 2. If no session, sign in anonymously
-      if (!session) {
-        const { error: signInError } = await supabase.auth.signInAnonymously();
-        if (signInError) throw signInError;
-      }
-
-      // 3. Fetch notepad state (RLS protects this to only current user)
+      // 1. Fetch notepad state (RLS protects this to only current user)
       const { data, error } = await supabase
         .from('notepad_state')
         .select('content')

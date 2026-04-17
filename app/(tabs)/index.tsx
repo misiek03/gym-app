@@ -1,15 +1,21 @@
 import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { RecentSessionCard } from '../../components/dashboard/RecentSessionCard';
+import { supabase } from '../../lib/supabase';
 
 export default function DashboardScreen() {
   return (
     <ScrollView className="flex-1 bg-[#0e0e0e] pt-16 pb-32">
       {/* Top Bar */}
       <View className="flex-row items-center justify-between px-6 mb-10">
-        <View className="w-10 h-10 bg-[#20201f] rounded-full items-center justify-center">
+        <TouchableOpacity 
+          className="w-10 h-10 bg-[#20201f] rounded-full items-center justify-center active:opacity-80"
+          onPress={async () => {
+            await supabase.auth.signOut();
+          }}
+        >
           <Ionicons name="person" size={20} color="#adaaaa" />
-        </View>
+        </TouchableOpacity>
         <Text className="text-white font-black tracking-widest text-lg">
           KINE<Text className="text-[#cafd00]">TIC</Text>
         </Text>
