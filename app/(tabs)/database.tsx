@@ -1,17 +1,144 @@
 import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../providers/AuthProvider';
+
+type CustomExercise = {
+  id: string;
+  user_id: string;
+  name: string;
+  category: string | null;
+  body_area: string | null;
+  target_muscles: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+const CATEGORY_FILTERS = ['All', 'Upper', 'Lower', 'Core', 'Strength'];
+const SORT_OPTIONS = [
+  { label: 'Newest', value: 'newest' as const },
+  { label: 'A-Z', value: 'name_asc' as const },
+];
+type SortValue = (typeof SORT_OPTIONS)[number]['value'];
 
 export default function DatabaseScreen() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
   const [bodyArea, setBodyArea] = useState('');
   const [targetMuscles, setTargetMuscles] = useState('');
   const [notes, setNotes] = useState('');
-  const [customExercises, setCustomExercises] = useState<{ title: string; muscles: string }[]>([]);
+  const [searchText, setSearchText] = useState('');
+  const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const [activeCategory, setActiveCategory] = useState('All');
+  const [sortBy, setSortBy] = useState<SortValue>('newest');
+  const [editingExercise, setEditingExercise] = useState<CustomExercise | null>(null);
 
   const canSubmit = useMemo(() => name.trim().length > 0, [name]);
+
+  const customExercisesQuery = useQuery({
+    queryKey: ['customExercises', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('custom_exercises')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) {
+        throw error;
+      }
+      return (data ?? []) as CustomExercise[];
+    },
+  });
+
+  const saveExerciseMutation = useMutation({
+    mutationFn: async () => {
+      if (!user?.id) return;
+
+      const payload = {
+        user_id: user.id,
+        name: name.trim(),
+        category: category.trim() || null,
+        body_area: bodyArea.trim() || null,
+        target_muscles: targetMuscles.trim() || null,
+        notes: notes.trim() || null,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (editingExercise) {
+        const { error } = await supabase
+          .from('custom_exercises')
+          .update(payload)
+          .eq('id', editingExercise.id);
+        if (error) throw error;
+        return;
+      }
+
+      const { error } = await supabase
+        .from('custom_exercises')
+        .insert(payload);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customExercises', user?.id] });
+      setIsModalVisible(false);
+      resetForm();
+      setEditingExercise(null);
+    },
+    onError: () => {
+      Alert.alert('Save failed', 'Could not save the exercise. Try again.');
+    },
+  });
+
+  const deleteExerciseMutation = useMutation({
+    mutationFn: async (exerciseId: string) => {
+      const { error } = await supabase.from('custom_exercises').delete().eq('id', exerciseId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customExercises', user?.id] });
+    },
+    onError: () => {
+      Alert.alert('Delete failed', 'Could not delete the exercise. Try again.');
+    },
+  });
+
+  const customExercises = useMemo(() => {
+    const rows = customExercisesQuery.data ?? [];
+    const query = searchText.trim().toLowerCase();
+
+    const filtered = rows.filter((exercise) => {
+      const categoryValue = (exercise.category ?? '').trim().toLowerCase();
+      const matchesCategory =
+        activeCategory === 'All' ||
+        categoryValue.includes(activeCategory.toLowerCase());
+
+      const searchable = [
+        exercise.name,
+        exercise.category ?? '',
+        exercise.body_area ?? '',
+        exercise.target_muscles ?? '',
+        exercise.notes ?? '',
+      ]
+        .join(' ')
+        .toLowerCase();
+      const matchesSearch = !query || searchable.includes(query);
+
+      return matchesCategory && matchesSearch;
+    });
+
+    return filtered.sort((a, b) => {
+      if (sortBy === 'name_asc') {
+        return a.name.localeCompare(b.name);
+      }
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  }, [activeCategory, customExercisesQuery.data, searchText, sortBy]);
 
   const resetForm = () => {
     setName('');
@@ -29,20 +156,17 @@ export default function DatabaseScreen() {
       return;
     }
 
-    const details = [category.trim(), bodyArea.trim(), targetMuscles.trim()]
-      .filter(Boolean)
-      .join(' • ');
+    saveExerciseMutation.mutate();
+  };
 
-    setCustomExercises((prev) => [
-      {
-        title: trimmedName.toUpperCase(),
-        muscles: details || 'Custom exercise',
-      },
-      ...prev,
-    ]);
-
-    setIsModalVisible(false);
-    resetForm();
+  const openEditModal = (exercise: CustomExercise) => {
+    setEditingExercise(exercise);
+    setName(exercise.name);
+    setCategory(exercise.category ?? '');
+    setBodyArea(exercise.body_area ?? '');
+    setTargetMuscles(exercise.target_muscles ?? '');
+    setNotes(exercise.notes ?? '');
+    setIsModalVisible(true);
   };
 
   return (
@@ -50,33 +174,74 @@ export default function DatabaseScreen() {
       {/* Top Bar */}
       <View className="flex-row items-center justify-between px-6 mb-8">
         <Text className="text-white font-black tracking-tighter text-4xl">EXERCISES</Text>
-        <TouchableOpacity className="w-12 h-12 items-center justify-center bg-[#131313] rounded-full">
+        <TouchableOpacity
+          className="w-12 h-12 items-center justify-center bg-[#131313] rounded-full"
+          onPress={() => setIsSearchVisible((prev) => !prev)}
+        >
           <Ionicons name="search" size={20} color="#adaaaa" />
         </TouchableOpacity>
       </View>
 
       <ScrollView className="flex-1 px-6 pt-2 pb-32">
+        {isSearchVisible && (
+          <View className="mb-5">
+            <TextInput
+              value={searchText}
+              onChangeText={setSearchText}
+              placeholder="Search exercises..."
+              placeholderTextColor="#484847"
+              className="bg-[#131313] text-white rounded-2xl px-4 py-3"
+            />
+          </View>
+        )}
+
         {/* Categories / Filter chips */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-10 flex-row overflow-visible">
-           <TouchableOpacity className="bg-[#cafd00] px-5 py-3 rounded-full mr-3 items-center justify-center">
-             <Text className="text-[#0e0e0e] font-black text-xs tracking-widest uppercase">All</Text>
-           </TouchableOpacity>
-           <TouchableOpacity className="bg-[#2c2c2c] px-5 py-3 rounded-full mr-3 items-center justify-center">
-             <Text className="text-white font-bold text-xs tracking-widest uppercase">Upper</Text>
-           </TouchableOpacity>
-           <TouchableOpacity className="bg-[#2c2c2c] px-5 py-3 rounded-full mr-3 items-center justify-center">
-             <Text className="text-white font-bold text-xs tracking-widest uppercase">Lower</Text>
-           </TouchableOpacity>
-           <TouchableOpacity className="bg-[#2c2c2c] px-5 py-3 rounded-full mr-6 items-center justify-center">
-             <Text className="text-white font-bold text-xs tracking-widest uppercase">Core</Text>
-           </TouchableOpacity>
+          {CATEGORY_FILTERS.map((filter) => {
+            const isActive = activeCategory === filter;
+            return (
+              <TouchableOpacity
+                key={filter}
+                className={`${isActive ? 'bg-[#cafd00]' : 'bg-[#2c2c2c]'} px-5 py-3 rounded-full mr-3 items-center justify-center`}
+                onPress={() => setActiveCategory(filter)}
+              >
+                <Text className={`${isActive ? 'text-[#0e0e0e] font-black' : 'text-white font-bold'} text-xs tracking-widest uppercase`}>
+                  {filter}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-6 flex-row overflow-visible">
+          {SORT_OPTIONS.map((option) => {
+            const isActive = sortBy === option.value;
+            return (
+              <TouchableOpacity
+                key={option.value}
+                className={`${isActive ? 'bg-[#cafd00]' : 'bg-[#20201f]'} px-4 py-2 rounded-full mr-3 items-center justify-center`}
+                onPress={() => setSortBy(option.value)}
+              >
+                <Text className={`${isActive ? 'text-[#0e0e0e] font-black' : 'text-[#d8d8d8] font-bold'} text-[10px] tracking-widest uppercase`}>
+                  Sort: {option.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
 
         {/* Database List */}
         <View className="mb-8">
-           {customExercises.map((exercise, index) => (
-             <View key={`${exercise.title}-${index}`}>
-               <ExerciseCard title={exercise.title} muscles={exercise.muscles} icon="sparkles-outline" />
+           {customExercises.map((exercise) => (
+             <View key={exercise.id}>
+               <ExerciseCard
+                 title={exercise.name.toUpperCase()}
+                 muscles={[exercise.category, exercise.body_area, exercise.target_muscles].filter(Boolean).join(' • ') || 'Custom exercise'}
+                 icon="sparkles-outline"
+                 onEdit={() => openEditModal(exercise)}
+                 onDelete={() => deleteExerciseMutation.mutate(exercise.id)}
+                 isCustom
+               />
                <View className="h-4" />
              </View>
            ))}
@@ -110,7 +275,14 @@ export default function DatabaseScreen() {
           <View className="bg-[#131313] rounded-t-3xl p-6 pb-10">
             <View className="flex-row items-center justify-between mb-5">
               <Text className="text-white text-2xl font-black tracking-tighter">ADD EXERCISE</Text>
-              <TouchableOpacity onPress={() => setIsModalVisible(false)} className="w-10 h-10 rounded-full bg-[#20201f] items-center justify-center">
+              <TouchableOpacity
+                onPress={() => {
+                  setIsModalVisible(false);
+                  setEditingExercise(null);
+                  resetForm();
+                }}
+                className="w-10 h-10 rounded-full bg-[#20201f] items-center justify-center"
+              >
                 <Ionicons name="close" size={20} color="#adaaaa" />
               </TouchableOpacity>
             </View>
@@ -124,10 +296,10 @@ export default function DatabaseScreen() {
             <TouchableOpacity
               className={`mt-3 rounded-full py-4 items-center justify-center ${canSubmit ? 'bg-[#cafd00]' : 'bg-[#2c2c2c]'}`}
               onPress={handleAddExercise}
-              disabled={!canSubmit}
+              disabled={!canSubmit || saveExerciseMutation.isPending}
             >
               <Text className={`font-black tracking-widest text-xs uppercase ${canSubmit ? 'text-[#0e0e0e]' : 'text-[#7a7a7a]'}`}>
-                Save exercise
+                {saveExerciseMutation.isPending ? 'Saving...' : editingExercise ? 'Update exercise' : 'Save exercise'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -166,7 +338,21 @@ function FormInput({
   );
 }
 
-function ExerciseCard({ title, muscles, icon }: { title: string, muscles: string, icon: any }) {
+function ExerciseCard({
+  title,
+  muscles,
+  icon,
+  onEdit,
+  onDelete,
+  isCustom = false,
+}: {
+  title: string;
+  muscles: string;
+  icon: any;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  isCustom?: boolean;
+}) {
   return (
     <TouchableOpacity className="bg-[#131313] p-6 rounded-3xl flex-row items-center justify-between active:bg-[#20201f]">
       <View className="flex-row items-center flex-1">
@@ -178,9 +364,20 @@ function ExerciseCard({ title, muscles, icon }: { title: string, muscles: string
           <Text className="text-[#adaaaa] text-xs font-semibold uppercase tracking-widest">{muscles}</Text>
         </View>
       </View>
-      <View className="w-8 h-8 rounded-full bg-[#0e0e0e] items-center justify-center">
-        <Ionicons name="chevron-forward" size={16} color="#adaaaa" />
-      </View>
+      {isCustom ? (
+        <View className="flex-row items-center">
+          <TouchableOpacity onPress={onEdit} className="w-8 h-8 rounded-full bg-[#0e0e0e] items-center justify-center mr-2">
+            <Ionicons name="create-outline" size={14} color="#adaaaa" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onDelete} className="w-8 h-8 rounded-full bg-[#0e0e0e] items-center justify-center">
+            <Ionicons name="trash-outline" size={14} color="#ff6767" />
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View className="w-8 h-8 rounded-full bg-[#0e0e0e] items-center justify-center">
+          <Ionicons name="chevron-forward" size={16} color="#adaaaa" />
+        </View>
+      )}
     </TouchableOpacity>
   );
 }

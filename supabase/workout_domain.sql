@@ -37,3 +37,18 @@ create index if not exists session_exercises_session_idx
 
 create index if not exists exercise_sets_exercise_idx
   on public.exercise_sets (session_exercise_id, set_order);
+
+create table if not exists public.custom_exercises (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  category text,
+  body_area text,
+  target_muscles text,
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists custom_exercises_user_created_idx
+  on public.custom_exercises (user_id, created_at desc);
