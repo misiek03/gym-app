@@ -272,9 +272,20 @@ export default function AddExerciseScreen() {
           disabled={!isValid || mutation.isPending}
           className={`py-5 rounded-full items-center justify-center flex-row ${
             isValid && !mutation.isPending
-              ? 'bg-[#cafd00] shadow-[0_0_32px_rgba(202,253,0,0.15)]'
+              ? 'bg-[#cafd00]'
               : 'bg-[#2c2c2c]'
           }`}
+          style={
+            isValid && !mutation.isPending
+              ? {
+                  shadowColor: 'rgba(202,253,0,0.15)',
+                  shadowOffset: { width: 0, height: 0 },
+                  shadowRadius: 32,
+                  shadowOpacity: 1,
+                  elevation: 8,
+                }
+              : undefined
+          }
           activeOpacity={0.8}
         >
           {mutation.isPending ? (

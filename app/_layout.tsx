@@ -11,7 +11,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AuthProvider, useAuth } from '../providers/AuthProvider';
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  initialRouteName: '(tabs)',
 };
 
 const queryClient = new QueryClient();
