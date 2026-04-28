@@ -41,7 +41,7 @@ export default function WorkoutCreatorScreen() {
           <Text className="text-[#adaaaa] text-xs font-semibold tracking-widest uppercase">Drop next exercise here</Text>
         </TouchableOpacity>
 
-        <Text className="text-white text-xl font-black tracking-tighter mb-4">COACH'S NOTES</Text>
+        <Text className="text-white text-xl font-black tracking-tighter mb-4">COACH&apos;S NOTES</Text>
         <TextInput 
           multiline 
           placeholder="Focus on eccentric control for presses..."
