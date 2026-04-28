@@ -3,11 +3,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../providers/AuthProvider';
 
 const TAB_BAR_HEIGHT = 65;
 
 export default function NotepadScreen() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [text, setText] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved'|'saving'|'error'>('saved');
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
@@ -44,16 +46,20 @@ export default function NotepadScreen() {
       showSub.remove();
       hideSub.remove();
     };
-  }, []);
+  }, [animatedPaddingBottom]);
 
   // Load session & data
   const { data: remoteText, isLoading } = useQuery({
-    queryKey: ['notepad'],
+    queryKey: ['notepad', user?.id],
+    enabled: !!user?.id,
     queryFn: async () => {
+      if (!user?.id) return '';
+
       const { data, error } = await supabase
         .from('notepad_state')
         .select('content')
-        .single();
+        .eq('user_id', user.id)
+        .maybeSingle();
       
       if (error && error.code !== 'PGRST116') throw error;
       return data?.content || '';
@@ -68,20 +74,29 @@ export default function NotepadScreen() {
     }
   }, [remoteText]);
 
+  useEffect(() => {
+    if (!user?.id) {
+      setText('');
+      setSaveStatus('saved');
+    }
+  }, [user?.id]);
+
   // Debounced Auto-save mutation
   const saveMutation = useMutation({
     mutationFn: async (newText: string) => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      if (!user?.id) return;
       
       const { error } = await supabase
         .from('notepad_state')
-        .upsert({ user_id: session.user.id, content: newText, updated_at: new Date().toISOString() });
+        .upsert(
+          { user_id: user.id, content: newText, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id' }
+        );
       if (error) throw error;
     },
     onSuccess: () => {
       setSaveStatus('saved');
-      queryClient.setQueryData(['notepad'], text);
+      queryClient.setQueryData(['notepad', user?.id], text);
     },
     onError: () => {
       setSaveStatus('error');
@@ -90,14 +105,20 @@ export default function NotepadScreen() {
 
   // Effect to trigger debounce save
   useEffect(() => {
-    if (remoteText !== undefined && text !== remoteText && text !== queryClient.getQueryData(['notepad'])) {
+    if (!user?.id) return;
+
+    if (
+      remoteText !== undefined &&
+      text !== remoteText &&
+      text !== queryClient.getQueryData(['notepad', user.id])
+    ) {
       setSaveStatus('saving');
       const timer = setTimeout(() => {
         saveMutation.mutate(text);
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [text, remoteText]);
+  }, [text, remoteText, user?.id, queryClient, saveMutation]);
 
   return (
     <View className="flex-1 bg-[#0e0e0e]">
