@@ -1,7 +1,50 @@
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { useMemo, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function DatabaseScreen() {
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [name, setName] = useState('');
+  const [category, setCategory] = useState('');
+  const [bodyArea, setBodyArea] = useState('');
+  const [targetMuscles, setTargetMuscles] = useState('');
+  const [notes, setNotes] = useState('');
+  const [customExercises, setCustomExercises] = useState<{ title: string; muscles: string }[]>([]);
+
+  const canSubmit = useMemo(() => name.trim().length > 0, [name]);
+
+  const resetForm = () => {
+    setName('');
+    setCategory('');
+    setBodyArea('');
+    setTargetMuscles('');
+    setNotes('');
+  };
+
+  const handleAddExercise = () => {
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
+      Alert.alert('Exercise name required', 'Please provide the exercise name.');
+      return;
+    }
+
+    const details = [category.trim(), bodyArea.trim(), targetMuscles.trim()]
+      .filter(Boolean)
+      .join(' • ');
+
+    setCustomExercises((prev) => [
+      {
+        title: trimmedName.toUpperCase(),
+        muscles: details || 'Custom exercise',
+      },
+      ...prev,
+    ]);
+
+    setIsModalVisible(false);
+    resetForm();
+  };
+
   return (
     <View className="flex-1 bg-[#0e0e0e] pt-16">
       {/* Top Bar */}
@@ -31,6 +74,12 @@ export default function DatabaseScreen() {
 
         {/* Database List */}
         <View className="mb-8">
+           {customExercises.map((exercise, index) => (
+             <View key={`${exercise.title}-${index}`}>
+               <ExerciseCard title={exercise.title} muscles={exercise.muscles} icon="sparkles-outline" />
+               <View className="h-4" />
+             </View>
+           ))}
            <ExerciseCard title="CHEST PRESS" muscles="Pectorals, Triceps" icon="fitness-outline" />
            <View className="h-4" />
            <ExerciseCard title="SQUATS" muscles="Quads, Glutes, Core" icon="body-outline" />
@@ -43,7 +92,10 @@ export default function DatabaseScreen() {
         </View>
 
         {/* Add New Exercise Card */}
-        <TouchableOpacity className="bg-[#131313] rounded-3xl p-8 items-center justify-center mb-16 active:opacity-80">
+        <TouchableOpacity
+          className="bg-[#131313] rounded-3xl p-8 items-center justify-center mb-16 active:opacity-80"
+          onPress={() => setIsModalVisible(true)}
+        >
           <View className="w-14 h-14 bg-[#20201f] rounded-full items-center justify-center mb-6 shadow-[0_0_24px_rgba(202,253,0,0.1)]">
              <Ionicons name="add" size={28} color="#cafd00" />
           </View>
@@ -52,6 +104,64 @@ export default function DatabaseScreen() {
         </TouchableOpacity>
 
       </ScrollView>
+
+      <Modal visible={isModalVisible} animationType="slide" transparent onRequestClose={() => setIsModalVisible(false)}>
+        <View className="flex-1 bg-black/60 justify-end">
+          <View className="bg-[#131313] rounded-t-3xl p-6 pb-10">
+            <View className="flex-row items-center justify-between mb-5">
+              <Text className="text-white text-2xl font-black tracking-tighter">ADD EXERCISE</Text>
+              <TouchableOpacity onPress={() => setIsModalVisible(false)} className="w-10 h-10 rounded-full bg-[#20201f] items-center justify-center">
+                <Ionicons name="close" size={20} color="#adaaaa" />
+              </TouchableOpacity>
+            </View>
+
+            <FormInput label="Exercise name *" value={name} onChangeText={setName} placeholder="e.g. Bulgarian Split Squat" />
+            <FormInput label="Category (optional)" value={category} onChangeText={setCategory} placeholder="e.g. Strength" />
+            <FormInput label="Body area (optional)" value={bodyArea} onChangeText={setBodyArea} placeholder="e.g. Lower body" />
+            <FormInput label="Target muscles (optional)" value={targetMuscles} onChangeText={setTargetMuscles} placeholder="e.g. Quads, Glutes" />
+            <FormInput label="Notes (optional)" value={notes} onChangeText={setNotes} placeholder="Any extra details" multiline />
+
+            <TouchableOpacity
+              className={`mt-3 rounded-full py-4 items-center justify-center ${canSubmit ? 'bg-[#cafd00]' : 'bg-[#2c2c2c]'}`}
+              onPress={handleAddExercise}
+              disabled={!canSubmit}
+            >
+              <Text className={`font-black tracking-widest text-xs uppercase ${canSubmit ? 'text-[#0e0e0e]' : 'text-[#7a7a7a]'}`}>
+                Save exercise
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+function FormInput({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  multiline = false,
+}: {
+  label: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder: string;
+  multiline?: boolean;
+}) {
+  return (
+    <View className="mb-4">
+      <Text className="text-[#adaaaa] text-[10px] font-bold tracking-widest uppercase mb-2">{label}</Text>
+      <TextInput
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#484847"
+        multiline={multiline}
+        className={`bg-[#0e0e0e] text-white rounded-2xl px-4 py-3 ${multiline ? 'h-24' : ''}`}
+        style={multiline ? { textAlignVertical: 'top' } : undefined}
+      />
     </View>
   );
 }
