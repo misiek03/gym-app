@@ -11,7 +11,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { AuthProvider, useAuth } from '../providers/AuthProvider';
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  initialRouteName: '(tabs)',
 };
 
 const queryClient = new QueryClient();
@@ -59,6 +59,7 @@ function RootLayoutNav() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        <Stack.Screen name="add-exercise" options={{ presentation: 'fullScreenModal', headerShown: false, animation: 'slide_from_bottom' }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
