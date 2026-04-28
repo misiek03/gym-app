@@ -5,15 +5,23 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../lib/supabase';
 
 const TAB_BAR_HEIGHT = 65;
+const MISSING_SESSION_MESSAGE = 'Sesja wygasła. Zaloguj się ponownie, aby synchronizować notatki.';
 
 export default function NotepadScreen() {
   const queryClient = useQueryClient();
   const [text, setText] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved'|'saving'|'error'>('saved');
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [sessionMessage, setSessionMessage] = useState<string | null>(null);
 
   // Animated value for the bottom padding that reacts to keyboard
   const animatedPaddingBottom = useRef(new Animated.Value(0)).current;
+
+  const clearLocalNotepadData = () => {
+    setText('');
+    queryClient.setQueryData(['notepad'], '');
+    setSaveStatus('saved');
+  };
 
   // Track keyboard height & animate the container
   useEffect(() => {
@@ -50,12 +58,23 @@ export default function NotepadScreen() {
   const { data: remoteText, isLoading } = useQuery({
     queryKey: ['notepad'],
     queryFn: async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        clearLocalNotepadData();
+        setSessionMessage(MISSING_SESSION_MESSAGE);
+        return '';
+      }
+
+      setSessionMessage(null);
+
       const { data, error } = await supabase
         .from('notepad_state')
         .select('content')
-        .single();
-      
-      if (error && error.code !== 'PGRST116') throw error;
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+
+      if (error) throw error;
       return data?.content || '';
     }
   });
@@ -72,11 +91,20 @@ export default function NotepadScreen() {
   const saveMutation = useMutation({
     mutationFn: async (newText: string) => {
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-      
+      if (!session) {
+        clearLocalNotepadData();
+        setSessionMessage(MISSING_SESSION_MESSAGE);
+        return;
+      }
+
+      setSessionMessage(null);
+
       const { error } = await supabase
         .from('notepad_state')
-        .upsert({ user_id: session.user.id, content: newText, updated_at: new Date().toISOString() });
+        .upsert(
+          { user_id: session.user.id, content: newText, updated_at: new Date().toISOString() },
+          { onConflict: 'user_id' }
+        );
       if (error) throw error;
     },
     onSuccess: () => {
@@ -127,6 +155,12 @@ export default function NotepadScreen() {
           </View>
         </Pressable>
 
+        {sessionMessage ? (
+          <View className="mb-4 rounded-2xl border border-[#4a2727] bg-[#1d1212] px-4 py-3">
+            <Text className="text-sm text-[#ff9e9e]">{sessionMessage}</Text>
+          </View>
+        ) : null}
+
         {/* Notes area — fills all remaining space, shrinks with keyboard */}
         <View className="flex-1 bg-[#131313] rounded-3xl p-6">
           {isLoading ? (
@@ -134,7 +168,7 @@ export default function NotepadScreen() {
                <ActivityIndicator size="large" color="#cafd00" />
              </View>
           ) : (
-            <TextInput 
+            <TextInput
               className="flex-1 text-white text-lg leading-relaxed"
               multiline
               scrollEnabled
