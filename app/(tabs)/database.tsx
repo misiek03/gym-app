@@ -48,6 +48,7 @@ export default function DatabaseScreen() {
       const { data, error } = await supabase
         .from('custom_exercises')
         .select('*')
+        .eq('user_id', user!.id)
         .order('created_at', { ascending: false });
       if (error) {
         throw error;
@@ -74,6 +75,7 @@ export default function DatabaseScreen() {
         const { error } = await supabase
           .from('custom_exercises')
           .update(payload)
+          .eq('user_id', user.id)
           .eq('id', editingExercise.id);
         if (error) throw error;
         return;
@@ -81,7 +83,7 @@ export default function DatabaseScreen() {
 
       const { error } = await supabase
         .from('custom_exercises')
-        .insert(payload);
+        .insert({ ...payload, created_at: new Date().toISOString() });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -97,7 +99,8 @@ export default function DatabaseScreen() {
 
   const deleteExerciseMutation = useMutation({
     mutationFn: async (exerciseId: string) => {
-      const { error } = await supabase.from('custom_exercises').delete().eq('id', exerciseId);
+      if (!user?.id) return;
+      const { error } = await supabase.from('custom_exercises').delete().eq('id', exerciseId).eq('user_id', user.id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -232,6 +235,11 @@ export default function DatabaseScreen() {
 
         {/* Database List */}
         <View className="mb-8">
+           {!customExercisesQuery.isLoading && customExercises.length === 0 && (
+             <View className="bg-[#131313] p-5 rounded-2xl mb-4">
+               <Text className="text-[#adaaaa] text-sm">No custom exercises match your filters.</Text>
+             </View>
+           )}
            {customExercises.map((exercise) => (
              <View key={exercise.id}>
                <ExerciseCard
@@ -259,7 +267,11 @@ export default function DatabaseScreen() {
         {/* Add New Exercise Card */}
         <TouchableOpacity
           className="bg-[#131313] rounded-3xl p-8 items-center justify-center mb-16 active:opacity-80"
-          onPress={() => setIsModalVisible(true)}
+          onPress={() => {
+            resetForm();
+            setEditingExercise(null);
+            setIsModalVisible(true);
+          }}
         >
           <View className="w-14 h-14 bg-[#20201f] rounded-full items-center justify-center mb-6 shadow-[0_0_24px_rgba(202,253,0,0.1)]">
              <Ionicons name="add" size={28} color="#cafd00" />
@@ -274,7 +286,9 @@ export default function DatabaseScreen() {
         <View className="flex-1 bg-black/60 justify-end">
           <View className="bg-[#131313] rounded-t-3xl p-6 pb-10">
             <View className="flex-row items-center justify-between mb-5">
-              <Text className="text-white text-2xl font-black tracking-tighter">ADD EXERCISE</Text>
+              <Text className="text-white text-2xl font-black tracking-tighter">
+                {editingExercise ? 'EDIT EXERCISE' : 'ADD EXERCISE'}
+              </Text>
               <TouchableOpacity
                 onPress={() => {
                   setIsModalVisible(false);

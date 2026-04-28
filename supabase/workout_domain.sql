@@ -52,3 +52,26 @@ create table if not exists public.custom_exercises (
 
 create index if not exists custom_exercises_user_created_idx
   on public.custom_exercises (user_id, created_at desc);
+
+alter table public.custom_exercises enable row level security;
+
+create policy if not exists "custom_exercises_select_own"
+  on public.custom_exercises
+  for select
+  using (auth.uid() = user_id);
+
+create policy if not exists "custom_exercises_insert_own"
+  on public.custom_exercises
+  for insert
+  with check (auth.uid() = user_id);
+
+create policy if not exists "custom_exercises_update_own"
+  on public.custom_exercises
+  for update
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+create policy if not exists "custom_exercises_delete_own"
+  on public.custom_exercises
+  for delete
+  using (auth.uid() = user_id);
