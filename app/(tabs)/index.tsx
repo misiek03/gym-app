@@ -1,10 +1,17 @@
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { RecentSessionCard } from '../../components/dashboard/RecentSessionCard';
 import { useRouter } from 'expo-router';
+import { useDashboardMetricsQuery, useRecentSessionsQuery } from '../../hooks/useWorkoutQueries';
+import { formatMinutes, formatShortMonthDay, formatTons } from '../../lib/formatters';
 
 export default function DashboardScreen() {
   const router = useRouter();
+  const { data: dashboardData, isLoading: isDashboardLoading, isError: isDashboardError, refetch: refetchDashboard } = useDashboardMetricsQuery();
+  const { data: recentSessions, isLoading: isRecentLoading, isError: isRecentError, refetch: refetchRecent } = useRecentSessionsQuery();
+
+  const bars = dashboardData?.weeklyAggregates ?? [];
+  const maxVolumeKg = Math.max(...bars.map((day) => day.volumeKg), 1);
 
   return (
     <ScrollView className="flex-1 bg-[#0e0e0e] pt-16 pb-32">
@@ -45,8 +52,14 @@ export default function DashboardScreen() {
             <Ionicons name="barbell" size={20} color="#cafd00" />
           </View>
           <Text className="text-[#adaaaa] text-xs font-bold tracking-widest uppercase mb-2">Total Workouts</Text>
-          <Text className="text-white text-5xl font-black tracking-tighter mb-1">24</Text>
-          <Text className="text-[#cafd00] text-sm font-bold">+3 this month</Text>
+          {isDashboardLoading ? (
+            <ActivityIndicator size="small" color="#cafd00" />
+          ) : (
+            <>
+              <Text className="text-white text-5xl font-black tracking-tighter mb-1">{dashboardData?.stats.totalWorkouts ?? 0}</Text>
+              <Text className="text-[#cafd00] text-sm font-bold">+{dashboardData?.stats.monthlyWorkouts ?? 0} this month</Text>
+            </>
+          )}
         </View>
 
         {/* Avg Duration */}
@@ -55,7 +68,10 @@ export default function DashboardScreen() {
             <Ionicons name="time" size={20} color="#00e3fd" />
           </View>
           <Text className="text-[#adaaaa] text-xs font-bold tracking-widest uppercase mb-2">Avg Duration</Text>
-          <Text className="text-white text-5xl font-black tracking-tighter mb-1">68<Text className="text-2xl text-[#adaaaa]">m</Text></Text>
+          <Text className="text-white text-5xl font-black tracking-tighter mb-1">
+            {isDashboardLoading ? '--' : dashboardData?.stats.avgDurationMinutes ?? 0}
+            <Text className="text-2xl text-[#adaaaa]"> min</Text>
+          </Text>
           <Text className="text-[#00e3fd] text-sm font-bold">High Consistency</Text>
         </View>
 
@@ -65,7 +81,9 @@ export default function DashboardScreen() {
             <MaterialCommunityIcons name="weight" size={20} color="#ffd700" />
           </View>
           <Text className="text-[#adaaaa] text-xs font-bold tracking-widest uppercase mb-2">Total Weight</Text>
-          <Text className="text-white text-5xl font-black tracking-tighter mb-1">18.4<Text className="text-2xl text-[#adaaaa]">t</Text></Text>
+          <Text className="text-white text-5xl font-black tracking-tighter mb-1">
+            {isDashboardLoading ? '--' : formatTons(dashboardData?.stats.totalVolumeKg ?? 0)}
+          </Text>
           <Text className="text-[#ffd700] text-sm font-bold">Volume Record</Text>
         </View>
       </View>
@@ -83,23 +101,29 @@ export default function DashboardScreen() {
           </View>
         </View>
         
-        <View className="h-48 flex-row items-end justify-between pt-4">
-          {[
-            { day: 'MON', h: 30, color: 'bg-[#20201f]' },
-            { day: 'TUE', h: 45, color: 'bg-[#20201f]' },
-            { day: 'WED', h: 65, color: 'bg-[#cafd00]', val: '3.4t' },
-            { day: 'THU', h: 40, color: 'bg-[#20201f]' },
-            { day: 'FRI', h: 80, color: 'bg-[#cafd00]', val: '3.8t' },
-            { day: 'SAT', h: 35, color: 'bg-[#20201f]' },
-            { day: 'SUN', h: 50, color: 'bg-[#cafd00]', val: '1.2t' }
-          ].map((bar, i) => (
-            <View key={i} className="items-center w-[12%]">
-              {bar.val && <Text className="text-[#cafd00] text-xs font-bold mb-2">{bar.val}</Text>}
-              <View className={`w-full rounded-t-xl ${bar.color}`} style={{ height: `${bar.h}%` }} />
-              <Text className="text-[#adaaaa] text-[10px] font-bold mt-3">{bar.day}</Text>
-            </View>
-          ))}
-        </View>
+        {isDashboardError ? (
+          <TouchableOpacity onPress={() => refetchDashboard()} className="bg-[#131313] rounded-2xl p-4">
+            <Text className="text-[#ff7a7a] font-bold">Failed to load weekly volume. Tap to retry.</Text>
+          </TouchableOpacity>
+        ) : isDashboardLoading ? (
+          <View className="h-48 items-center justify-center">
+            <ActivityIndicator size="large" color="#cafd00" />
+          </View>
+        ) : (
+          <View className="h-48 flex-row items-end justify-between pt-4">
+            {bars.map((bar, i) => {
+              const heightPct = Math.max(Math.round((bar.volumeKg / maxVolumeKg) * 100), 6);
+              const hasVolume = bar.volumeKg > 0;
+              return (
+                <View key={`${bar.date}-${i}`} className="items-center w-[12%]">
+                  {hasVolume && <Text className="text-[#cafd00] text-xs font-bold mb-2">{formatTons(bar.volumeKg)}</Text>}
+                  <View className={`w-full rounded-t-xl ${hasVolume ? 'bg-[#cafd00]' : 'bg-[#20201f]'}`} style={{ height: `${heightPct}%` }} />
+                  <Text className="text-[#adaaaa] text-[10px] font-bold mt-3">{bar.dayLabel}</Text>
+                </View>
+              );
+            })}
+          </View>
+        )}
       </View>
 
       {/* Push Button Card */}
@@ -132,9 +156,33 @@ export default function DashboardScreen() {
       </View>
 
       <View className="px-6 space-y-3 mb-10 pb-8">
-        <RecentSessionCard title="Hypertrophy Upper A" month="OCT" day="24" location="Iron Temple Gym" duration="72m" />
-        <RecentSessionCard title="Active Recovery / Zone 2" month="OCT" day="22" location="Riverside Trail" duration="45m" />
-        <RecentSessionCard title="Deadlift Specialization" month="OCT" day="21" location="Performance Lab" duration="90m" />
+        {isRecentError ? (
+          <TouchableOpacity onPress={() => refetchRecent()} className="bg-[#131313] rounded-2xl p-4">
+            <Text className="text-[#ff7a7a] font-bold">Failed to load recent sessions. Tap to retry.</Text>
+          </TouchableOpacity>
+        ) : isRecentLoading ? (
+          <View className="py-6">
+            <ActivityIndicator size="large" color="#cafd00" />
+          </View>
+        ) : recentSessions && recentSessions.length > 0 ? (
+          recentSessions.map((session) => {
+            const date = formatShortMonthDay(session.startedAt);
+            return (
+              <RecentSessionCard
+                key={session.id}
+                title={session.title}
+                month={date.month}
+                day={date.day}
+                location={session.location}
+                duration={formatMinutes(session.durationMinutes)}
+              />
+            );
+          })
+        ) : (
+          <View className="bg-[#131313] rounded-2xl p-4">
+            <Text className="text-[#adaaaa]">No sessions yet. Start your first workout to populate this feed.</Text>
+          </View>
+        )}
       </View>
     </ScrollView>
   );

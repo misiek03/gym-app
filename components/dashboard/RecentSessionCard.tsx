@@ -5,7 +5,7 @@ interface Props {
   title: string;
   month: string;
   day: string;
-  location: string;
+  location?: string | null;
   duration: string;
 }
 
@@ -23,7 +23,7 @@ export function RecentSessionCard({ title, month, day, location, duration }: Pro
         <Text className="text-white font-bold text-lg tracking-tight mb-2" numberOfLines={1}>{title}</Text>
         <View className="flex-row items-center">
           <Ionicons name="location-sharp" size={12} color="#adaaaa" />
-          <Text className="text-[#adaaaa] text-[11px] font-medium ml-1 mr-3">{location}</Text>
+          <Text className="text-[#adaaaa] text-[11px] font-medium ml-1 mr-3">{location ?? 'Unknown location'}</Text>
           <Ionicons name="time" size={12} color="#adaaaa" />
           <Text className="text-[#adaaaa] text-[11px] font-medium ml-1">{duration}</Text>
         </View>
