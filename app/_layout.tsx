@@ -25,9 +25,11 @@ function RootLayoutNav() {
   useEffect(() => {
     if (!isInitialized) return;
 
-    const inAuthGroup = segments[0] === '(auth)';
-    const onLoginPage = inAuthGroup && segments[1] === 'login';
-    const onProfilePage = inAuthGroup && segments[1] === 'profile';
+    const firstSegment = segments.at(0);
+    const secondSegment = segments.at(1);
+    const inAuthGroup = firstSegment === '(auth)';
+    const onLoginPage = inAuthGroup && secondSegment === 'login';
+    const onProfilePage = inAuthGroup && secondSegment === 'profile';
 
     if (!session && !inAuthGroup) {
       // Not logged in and not in auth group → go to login
@@ -41,7 +43,7 @@ function RootLayoutNav() {
     }
     // If logged in and on profile page → let them stay
     // If not logged in and on login page → let them stay
-  }, [session, isInitialized, segments]);
+  }, [session, isInitialized, segments, router]);
 
   if (!isInitialized) {
     return (

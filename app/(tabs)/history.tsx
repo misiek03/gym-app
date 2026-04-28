@@ -1,13 +1,20 @@
-import { View, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRecentSessionsQuery } from '../../hooks/useWorkoutQueries';
+import { formatKilograms, formatMinutes, formatMonthYear } from '../../lib/formatters';
 
 export default function HistoryScreen() {
+  const { data: sessions, isLoading, isError, refetch } = useRecentSessionsQuery();
+  const mostRecentDate = sessions?.[0]?.startedAt;
+
   return (
     <ScrollView className="flex-1 bg-[#0e0e0e] pt-16 pb-32">
       {/* Header section */}
       <View className="px-6 mb-8 flex-row items-end justify-between">
         <View>
-          <Text className="text-[#cafd00] font-black text-xs tracking-widest uppercase mb-1">October 2023</Text>
+          <Text className="text-[#cafd00] font-black text-xs tracking-widest uppercase mb-1">
+            {mostRecentDate ? formatMonthYear(mostRecentDate) : 'No Data'}
+          </Text>
           <Text className="text-white text-4xl font-black tracking-tighter leading-tight">HISTORY</Text>
         </View>
         <TouchableOpacity className="w-10 h-10 bg-[#131313] rounded-full items-center justify-center">
@@ -18,10 +25,30 @@ export default function HistoryScreen() {
       <View className="px-6">
         <Text className="text-[#adaaaa] font-bold text-lg tracking-tighter mb-6">Recent Movements</Text>
 
-        <HistoryCard title="Hypertrophy Upper A" duration="72m" volume="14,200kg" exercises="6" icon="barbell" />
-        <HistoryCard title="Endurance Protocol" duration="55m" volume="8,450kg" exercises="8" icon="fitness" />
-        <HistoryCard title="Power Lower Body" duration="62m" volume="11,900kg" exercises="5" icon="body" />
-        <HistoryCard title="Active Recovery" duration="45m" volume="2,100kg" exercises="3" icon="walk" />
+        {isError ? (
+          <TouchableOpacity onPress={() => refetch()} className="bg-[#131313] rounded-2xl p-4">
+            <Text className="text-[#ff7a7a] font-bold">Failed to load history. Tap to retry.</Text>
+          </TouchableOpacity>
+        ) : isLoading ? (
+          <View className="py-8">
+            <ActivityIndicator size="large" color="#cafd00" />
+          </View>
+        ) : sessions && sessions.length > 0 ? (
+          sessions.map((session) => (
+            <HistoryCard
+              key={session.id}
+              title={session.title}
+              duration={formatMinutes(session.durationMinutes)}
+              volume={formatKilograms(session.volumeKg)}
+              exercises={session.exerciseCount.toString()}
+              icon="barbell"
+            />
+          ))
+        ) : (
+          <View className="bg-[#131313] rounded-2xl p-4">
+            <Text className="text-[#adaaaa]">No history yet. Completed sessions will appear here.</Text>
+          </View>
+        )}
       </View>
       <View className="h-20" />
     </ScrollView>
