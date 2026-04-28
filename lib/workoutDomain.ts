@@ -102,6 +102,29 @@ export async function getWorkoutSessions(userId: string, limit = 24): Promise<Wo
   return (data ?? []) as WorkoutSession[];
 }
 
+export async function createWorkoutSessionDraft(userId: string) {
+  const startedAt = new Date().toISOString();
+  const endedAt = new Date(Date.now() + 45 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
+    .from('workout_sessions')
+    .insert({
+      user_id: userId,
+      title: 'New Workout',
+      location: 'Gym Floor',
+      started_at: startedAt,
+      ended_at: endedAt,
+      duration_minutes: 45,
+    })
+    .select('id')
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 export function buildSessionSummaries(sessions: WorkoutSession[], take?: number): SessionSummary[] {
   const source = take ? sessions.slice(0, take) : sessions;
   return source.map((session) => ({

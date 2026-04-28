@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { trackEvent } from '../../lib/analytics';
 
 export default function DatabaseScreen() {
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -10,6 +11,8 @@ export default function DatabaseScreen() {
   const [targetMuscles, setTargetMuscles] = useState('');
   const [notes, setNotes] = useState('');
   const [customExercises, setCustomExercises] = useState<{ title: string; muscles: string }[]>([]);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'upper' | 'lower' | 'core'>('all');
+  const [selectedExercise, setSelectedExercise] = useState<{ title: string; muscles: string } | null>(null);
 
   const canSubmit = useMemo(() => name.trim().length > 0, [name]);
 
@@ -42,53 +45,92 @@ export default function DatabaseScreen() {
     ]);
 
     setIsModalVisible(false);
+    trackEvent('exercise_created', { exercise_name: trimmedName.toUpperCase() });
     resetForm();
   };
+
+  const allExercises = [
+    ...customExercises,
+    { title: 'CHEST PRESS', muscles: 'Pectorals, Triceps' },
+    { title: 'SQUATS', muscles: 'Quads, Glutes, Core' },
+    { title: 'DEADLIFT', muscles: 'Posterior Chain' },
+    { title: 'PULL UPS', muscles: 'Lats, Biceps' },
+    { title: 'LAT PULLDOWN', muscles: 'Lats, Upper Back' },
+  ];
+
+  const filteredExercises = allExercises.filter((exercise) => {
+    if (activeFilter === 'all') return true;
+    const lower = exercise.muscles.toLowerCase();
+    if (activeFilter === 'upper') return /(chest|triceps|lats|upper|biceps|shoulders|back)/.test(lower);
+    if (activeFilter === 'lower') return /(quads|glutes|hamstrings|lower)/.test(lower);
+    return /(core|abs)/.test(lower);
+  });
 
   return (
     <View className="flex-1 bg-[#0e0e0e] pt-16">
       {/* Top Bar */}
       <View className="flex-row items-center justify-between px-6 mb-8">
         <Text className="text-white font-black tracking-tighter text-4xl">EXERCISES</Text>
-        <TouchableOpacity className="w-12 h-12 items-center justify-center bg-[#131313] rounded-full">
-          <Ionicons name="search" size={20} color="#adaaaa" />
-        </TouchableOpacity>
+        <View className="w-12 h-12" />
       </View>
 
       <ScrollView className="flex-1 px-6 pt-2 pb-32">
         {/* Categories / Filter chips */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-10 flex-row overflow-visible">
-           <TouchableOpacity className="bg-[#cafd00] px-5 py-3 rounded-full mr-3 items-center justify-center">
+           <TouchableOpacity
+             className={`${activeFilter === 'all' ? 'bg-[#cafd00]' : 'bg-[#2c2c2c]'} px-5 py-3 rounded-full mr-3 items-center justify-center`}
+             onPress={() => {
+               setActiveFilter('all');
+               trackEvent('exercise_filter_changed', { filter: 'all' });
+             }}
+           >
              <Text className="text-[#0e0e0e] font-black text-xs tracking-widest uppercase">All</Text>
            </TouchableOpacity>
-           <TouchableOpacity className="bg-[#2c2c2c] px-5 py-3 rounded-full mr-3 items-center justify-center">
+           <TouchableOpacity
+             className={`${activeFilter === 'upper' ? 'bg-[#cafd00]' : 'bg-[#2c2c2c]'} px-5 py-3 rounded-full mr-3 items-center justify-center`}
+             onPress={() => {
+               setActiveFilter('upper');
+               trackEvent('exercise_filter_changed', { filter: 'upper' });
+             }}
+           >
              <Text className="text-white font-bold text-xs tracking-widest uppercase">Upper</Text>
            </TouchableOpacity>
-           <TouchableOpacity className="bg-[#2c2c2c] px-5 py-3 rounded-full mr-3 items-center justify-center">
+           <TouchableOpacity
+             className={`${activeFilter === 'lower' ? 'bg-[#cafd00]' : 'bg-[#2c2c2c]'} px-5 py-3 rounded-full mr-3 items-center justify-center`}
+             onPress={() => {
+               setActiveFilter('lower');
+               trackEvent('exercise_filter_changed', { filter: 'lower' });
+             }}
+           >
              <Text className="text-white font-bold text-xs tracking-widest uppercase">Lower</Text>
            </TouchableOpacity>
-           <TouchableOpacity className="bg-[#2c2c2c] px-5 py-3 rounded-full mr-6 items-center justify-center">
+           <TouchableOpacity
+             className={`${activeFilter === 'core' ? 'bg-[#cafd00]' : 'bg-[#2c2c2c]'} px-5 py-3 rounded-full mr-6 items-center justify-center`}
+             onPress={() => {
+               setActiveFilter('core');
+               trackEvent('exercise_filter_changed', { filter: 'core' });
+             }}
+           >
              <Text className="text-white font-bold text-xs tracking-widest uppercase">Core</Text>
            </TouchableOpacity>
         </ScrollView>
 
         {/* Database List */}
         <View className="mb-8">
-           {customExercises.map((exercise, index) => (
+           {filteredExercises.map((exercise, index) => (
              <View key={`${exercise.title}-${index}`}>
-               <ExerciseCard title={exercise.title} muscles={exercise.muscles} icon="sparkles-outline" />
+               <ExerciseCard
+                 title={exercise.title}
+                 muscles={exercise.muscles}
+                 icon="barbell-outline"
+                 onPress={() => {
+                   trackEvent('exercise_card_opened', { exercise_name: exercise.title });
+                   setSelectedExercise(exercise);
+                 }}
+               />
                <View className="h-4" />
              </View>
            ))}
-           <ExerciseCard title="CHEST PRESS" muscles="Pectorals, Triceps" icon="fitness-outline" />
-           <View className="h-4" />
-           <ExerciseCard title="SQUATS" muscles="Quads, Glutes, Core" icon="body-outline" />
-           <View className="h-4" />
-           <ExerciseCard title="DEADLIFT" muscles="Posterior Chain" icon="barbell-outline" />
-           <View className="h-4" />
-           <ExerciseCard title="PULL UPS" muscles="Lats, Biceps" icon="walk-outline" />
-           <View className="h-4" />
-           <ExerciseCard title="LAT PULLDOWN" muscles="Lats, Upper Back" icon="barbell-outline" />
         </View>
 
         {/* Add New Exercise Card */}
@@ -133,6 +175,17 @@ export default function DatabaseScreen() {
           </View>
         </View>
       </Modal>
+      <Modal visible={!!selectedExercise} transparent animationType="slide" onRequestClose={() => setSelectedExercise(null)}>
+        <View className="flex-1 bg-black/60 justify-end">
+          <View className="bg-[#131313] rounded-t-3xl p-6 pb-10">
+            <Text className="text-white text-2xl font-black tracking-tighter">{selectedExercise?.title}</Text>
+            <Text className="text-[#adaaaa] mt-2 mb-6">{selectedExercise?.muscles}</Text>
+            <TouchableOpacity className="bg-[#20201f] rounded-full py-3 items-center" onPress={() => setSelectedExercise(null)}>
+              <Text className="text-white font-bold tracking-widest uppercase">Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -166,9 +219,9 @@ function FormInput({
   );
 }
 
-function ExerciseCard({ title, muscles, icon }: { title: string, muscles: string, icon: any }) {
+function ExerciseCard({ title, muscles, icon, onPress }: { title: string, muscles: string, icon: any, onPress: () => void }) {
   return (
-    <TouchableOpacity className="bg-[#131313] p-6 rounded-3xl flex-row items-center justify-between active:bg-[#20201f]">
+    <TouchableOpacity className="bg-[#131313] p-6 rounded-3xl flex-row items-center justify-between active:bg-[#20201f]" onPress={onPress}>
       <View className="flex-row items-center flex-1">
         <View className="w-14 h-14 bg-[#20201f] rounded-2xl items-center justify-center mr-5">
           <Ionicons name={icon} size={24} color="#00e3fd" />

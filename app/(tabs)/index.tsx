@@ -1,14 +1,16 @@
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { RecentSessionCard } from '../../components/dashboard/RecentSessionCard';
 import { useRouter } from 'expo-router';
-import { useDashboardMetricsQuery, useRecentSessionsQuery } from '../../hooks/useWorkoutQueries';
+import { useDashboardMetricsQuery, useRecentSessionsQuery, useStartWorkoutMutation } from '../../hooks/useWorkoutQueries';
 import { formatMinutes, formatShortMonthDay, formatTons } from '../../lib/formatters';
+import { trackEvent } from '../../lib/analytics';
 
 export default function DashboardScreen() {
   const router = useRouter();
   const { data: dashboardData, isLoading: isDashboardLoading, isError: isDashboardError, refetch: refetchDashboard } = useDashboardMetricsQuery();
   const { data: recentSessions, isLoading: isRecentLoading, isError: isRecentError, refetch: refetchRecent } = useRecentSessionsQuery();
+  const startWorkoutMutation = useStartWorkoutMutation();
 
   const bars = dashboardData?.weeklyAggregates ?? [];
   const maxVolumeKg = Math.max(...bars.map((day) => day.volumeKg), 1);
@@ -26,9 +28,7 @@ export default function DashboardScreen() {
         <Text className="text-white font-black tracking-widest text-lg">
           KINE<Text className="text-[#cafd00]">TIC</Text>
         </Text>
-        <TouchableOpacity className="w-10 h-10 items-center justify-center">
-          <Ionicons name="settings-sharp" size={24} color="#adaaaa" />
-        </TouchableOpacity>
+        <View className="w-10 h-10" />
       </View>
 
       {/* Header Section */}
@@ -140,7 +140,19 @@ export default function DashboardScreen() {
             READY TO{'\n'}PUSH?
           </Text>
           
-          <TouchableOpacity className="bg-[#131313] py-5 px-6 rounded-full flex-row items-center justify-center active:opacity-80">
+          <TouchableOpacity
+            className="bg-[#131313] py-5 px-6 rounded-full flex-row items-center justify-center active:opacity-80"
+            onPress={async () => {
+              trackEvent('start_workout_clicked');
+              try {
+                await startWorkoutMutation.mutateAsync();
+                router.push('/(tabs)/fitness_center');
+              } catch {
+                Alert.alert('Unable to start workout', 'Please try again in a moment.');
+              }
+            }}
+            disabled={startWorkoutMutation.isPending}
+          >
             <Text className="text-[#cafd00] font-black tracking-widest text-sm mr-2">START WORKOUT</Text>
             <Ionicons name="flash" size={16} color="#cafd00" />
           </TouchableOpacity>
@@ -150,7 +162,12 @@ export default function DashboardScreen() {
       {/* Recent Sessions */}
       <View className="px-6 mb-8 flex-row justify-between items-end">
         <Text className="text-white text-2xl font-black tracking-tighter">RECENT SESSIONS</Text>
-        <TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => {
+            trackEvent('recent_sessions_view_all_clicked');
+            router.push('/(tabs)/history');
+          }}
+        >
           <Text className="text-[#cafd00] font-bold text-xs tracking-widest uppercase mb-1">View All</Text>
         </TouchableOpacity>
       </View>

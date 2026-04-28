@@ -1,9 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../providers/AuthProvider';
 import {
   buildDashboardStats,
   buildSessionSummaries,
   buildWeeklyAggregates,
+  createWorkoutSessionDraft,
   getWorkoutSessions,
 } from '../lib/workoutDomain';
 
@@ -33,5 +34,24 @@ export function useDashboardMetricsQuery() {
       };
     },
     enabled: !!user?.id,
+  });
+}
+
+export function useStartWorkoutMutation() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!user?.id) {
+        throw new Error('User is not authenticated');
+      }
+
+      return createWorkoutSessionDraft(user.id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['workouts', user?.id, 'recent'] });
+      queryClient.invalidateQueries({ queryKey: ['workouts', user?.id, 'dashboard'] });
+    },
   });
 }
